@@ -1,0 +1,37 @@
+# Build
+build/
+/*/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+out/
+bin/
+gen/
+
+# Gradle
+.gradle/
+.kotlin/
+
+# Machine-specific
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+.navigation/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Signing / secrets
+*.jks
+*.keystore
+
+# Logs
+*.log
