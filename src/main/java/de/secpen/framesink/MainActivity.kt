@@ -42,11 +42,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private var source: FrameSource? = null
     private val main = Handler(Looper.getMainLooper())
+    private val previewExec = Executors.newSingleThreadExecutor()
 
     // fps bookkeeping (read on the UI display loop)
     private var prevCount = 0L
     private var prevTs = 0L
     private var fps = 0.0
+    @Volatile private var previewRenderInFlight = false
+    private var lastRenderedFrameCount = -1L
+    private var lastRenderAtMs = 0L
 
     private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -70,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         main.removeCallbacks(displayLoop)
         source?.stop()
+        previewExec.shutdownNow()
         super.onDestroy()
     }
 
@@ -103,7 +108,26 @@ class MainActivity : AppCompatActivity() {
             val mode = when { b.modeCamera2.isChecked -> "Camera2/ImageReader"
                 b.modeCameraX.isChecked -> "CameraX/ImageAnalysis"; else -> "Camera1/onPreviewFrame" }
             if (snap != null && w > 0 && h > 0) {
-                b.sinkView.setImageBitmapSafe(nv21ToBitmap(snap, w, h))
+                if (count != lastRenderedFrameCount && !previewRenderInFlight && now - lastRenderAtMs >= 180L) {
+                    previewRenderInFlight = true
+                    val frame = snap
+                    val frameCount = count
+                    runCatching {
+                        previewExec.execute {
+                            val bmp = nv21ToBitmap(frame, w, h)
+                            main.post {
+                                previewRenderInFlight = false
+                                if (bmp != null && frameCount >= lastRenderedFrameCount) {
+                                    lastRenderedFrameCount = frameCount
+                                    lastRenderAtMs = System.currentTimeMillis()
+                                    b.sinkView.setImageBitmapSafe(bmp)
+                                }
+                            }
+                        }
+                    }.onFailure {
+                        previewRenderInFlight = false
+                    }
+                }
                 b.stats.text = "%s | %dx%d | %d B | %.0f fps | frames=%d | csum=%08x"
                     .format(mode, w, h, snap.size, fps, count, checksum(snap))
             } else {
